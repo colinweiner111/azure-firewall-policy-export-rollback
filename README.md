@@ -1,141 +1,159 @@
-# Azure Hub-Spoke Network Infrastructure (with Firewall Management Interface)
+# Azure Firewall Policy Export and Restore
 
-Deploys a complete hub-and-spoke Azure network topology using Bicep. Includes a central hub with Azure Firewall Premium (with dedicated management interface), Azure Bastion, and Active/Active VPN gateways, two spoke VNets, and a simulated on-premises environment — all wired together with BGP-enabled Site-to-Site IPSec connections.
+PowerShell scripts to export an Azure Firewall Policy and all Rule Collection Groups to a timestamped snapshot, then restore from any export with dry-run support. Designed so a customer can capture the current state before making rule changes and restore in minutes if something goes wrong.
 
-## Architecture
+## How it works
 
-![Hub-Spoke Architecture](images/architecture.png)
-
-The topology connects four networks:
-
-- **Spoke01 and Spoke02** peer into the Hub and route all traffic (including internet) through Azure Firewall
-- **Hub** hosts all shared services — Firewall, Bastion, and the Active/Active VPN Gateway
-- **OnPrem01** connects to the Hub via 4 Site-to-Site IPSec tunnels with BGP route exchange
-
-### Network Details
-
-| Network | Address Space | Purpose |
-|---|---|---|
-| Hub01 | 10.0.0.0/23 | Shared services (Firewall, Bastion, VPN GW) |
-| Spoke01 | 10.0.2.0/24 | Workload spoke 1 |
-| Spoke02 | 10.0.3.0/24 | Workload spoke 2 |
-| OnPrem01 | 192.168.0.0/24 | Simulated on-premises environment |
-
-### Hub Subnets
-
-| Subnet | Prefix |
-|---|---|
-| default | 10.0.0.0/26 |
-| GatewaySubnet | 10.0.0.64/26 |
-| AzureFirewallSubnet | 10.0.0.128/26 |
-| AzureBastionSubnet | 10.0.0.192/26 |
-| AzureFirewallManagementSubnet | 10.0.1.0/26 |
-
-### Resources Deployed
-
-| Resource | SKU / Config |
-|---|---|
-| Hub VPN Gateway | VpnGw1AZ, Active/Active, BGP ASN 65509 |
-| OnPrem VPN Gateway | VpnGw1AZ, Active/Active, BGP ASN 65510 |
-| VPN Connections | 4x IPSec with BGP (full active/active mesh) |
-| Azure Firewall | Premium, allow-all rule (lab use), dedicated management interface |
-| Azure Bastion | Standard |
-| VMs | 3x Ubuntu 22.04, Standard_B1s |
+`Backup-FirewallPolicy.ps1` exports the full policy and each Rule Collection Group as ARM JSON into a timestamped folder. `Restore-FirewallPolicy.ps1` reads that snapshot, verifies file integrity, and PUTs each resource back in priority order — waiting for each ARM operation to complete before moving to the next.
 
 ## Files
 
 | File | Purpose |
 |---|---|
-| `main.bicep` | Complete infrastructure definition |
-| `main.bicepparam` | Non-sensitive default parameters |
-| `deploy.ps1` | PowerShell deployment script |
+| `Backup-FirewallPolicy.ps1` | Exports firewall policy + RCGs to a timestamped snapshot |
+| `Restore-FirewallPolicy.ps1` | Restores policy + RCGs from a snapshot with dry-run support |
+| `main.bicep` / `deploy.ps1` | Hub-spoke lab environment used for testing |
+
+## Getting started
+
+### Option A — Azure Cloud Shell (recommended)
+
+[Azure Cloud Shell](https://shell.azure.com) is the easiest way to run these scripts. It has PowerShell 7.x and the Az module pre-installed, and you're already authenticated — no `Connect-AzAccount` needed.
+
+```powershell
+git clone https://github.com/colinweiner111/azure-firewall-policy-export-restore.git
+cd azure-firewall-policy-export-restore
+```
+
+Snapshots written to `backups/` persist between Cloud Shell sessions because Cloud Shell storage is backed by an Azure file share.
+
+### Option B — local machine
+
+```powershell
+git clone https://github.com/colinweiner111/azure-firewall-policy-export-restore.git
+cd azure-firewall-policy-export-restore
+```
+
+Then ensure the following are in place:
+
+- PowerShell 5.1+ (Windows PowerShell). **PowerShell 7.x is recommended** — it's the actively supported, cross-platform version. The scripts work on both.
+- [Az PowerShell module](https://learn.microsoft.com/en-us/powershell/azure/install-az-ps):
+  ```powershell
+  Install-Module Az -Scope CurrentUser -Repository PSGallery
+  ```
+- Logged in to Azure:
+  ```powershell
+  Connect-AzAccount
+  ```
 
 ## Requirements
 
-- [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli) installed and logged in (`az login`)
-- [Bicep CLI](https://learn.microsoft.com/en-us/azure/azure-resource-manager/bicep/install) (`az bicep install`)
-- Azure subscription with Contributor access
+- **Contributor** or **Network Contributor** on the resource group containing the firewall policy
 
-## Deployment
+## Snapshot before a change
 
-### Clone the repo
+Run this before editing any firewall rules. The snapshot is saved to `backups/<timestamp>/` and is git-ignored by default.
 
 ```powershell
-git clone https://github.com/colinweiner111/azure-hub-and-spoke-fw-mgmt.git
-cd azure-hub-and-spoke-fw-mgmt
+.\Backup-FirewallPolicy.ps1 `
+    -ResourceGroupName rg-hub-spoke-demo `
+    -PolicyName        fw-policy-hub01
 ```
 
-### Deploy
+Each snapshot contains:
 
-Run `deploy.ps1` from PowerShell. The only required parameter is `-ResourceGroupName`.
+| File | Contents |
+|---|---|
+| `manifest.json` | Metadata, resource IDs, SHA256 hashes for integrity verification |
+| `policy.json` | Full ARM export of the firewall policy |
+| `rcg-<name>.json` | One file per Rule Collection Group |
+
+## Roll back to a snapshot
+
+**Step 1 — dry-run (no write/mutating API calls, shows exactly what will change):**
 
 ```powershell
-# Minimal — uses current subscription, centralus region
-.\deploy.ps1 -ResourceGroupName rg-hub-spoke-demo
-
-# Specify a different region
-.\deploy.ps1 -ResourceGroupName rg-hub-spoke-eastus01 -Location eastus
-
-# Specify a subscription
-.\deploy.ps1 -ResourceGroupName rg-hub-spoke-demo -SubscriptionId 00000000-0000-0000-0000-000000000000
-
-# All options
-.\deploy.ps1 `
-    -ResourceGroupName  rg-hub-spoke-demo `
-    -SubscriptionId     00000000-0000-0000-0000-000000000000 `
-    -Location           centralus `
-    -AdminUsername      azureuser
+.\Restore-FirewallPolicy.ps1 `
+    -ResourceGroupName rg-hub-spoke-demo `
+    -PolicyName        fw-policy-hub01 `
+    -SnapshotPath      .\backups\2024-01-15T14-30-00Z `
+    -WhatIf
 ```
 
-The script will prompt for the VM admin password securely. You can also pass it via `-AdminPassword` (as a `SecureString`).
+**Step 2 — interactive restore (single confirmation prompt):**
 
-### Parameters
+```powershell
+.\Restore-FirewallPolicy.ps1 `
+    -ResourceGroupName rg-hub-spoke-demo `
+    -PolicyName        fw-policy-hub01 `
+    -SnapshotPath      .\backups\2024-01-15T14-30-00Z
+```
+
+**Full rollback — restore snapshot exactly, delete any RCGs added since the snapshot:**
+
+```powershell
+.\Restore-FirewallPolicy.ps1 `
+    -ResourceGroupName rg-hub-spoke-demo `
+    -PolicyName        fw-policy-hub01 `
+    -SnapshotPath      .\backups\2024-01-15T14-30-00Z `
+    -Strict -Force
+```
+
+## Parameters
+
+### Backup-FirewallPolicy.ps1
 
 | Parameter | Required | Default | Description |
 |---|---|---|---|
-| `ResourceGroupName` | Yes | — | Resource group to deploy into (created if it doesn't exist) |
+| `ResourceGroupName` | Yes | — | Resource group containing the policy |
+| `PolicyName` | Yes | — | Firewall policy name |
+| `SubscriptionId` | No | Current Az context | Azure subscription ID |
+| `BackupDir` | No | `.\backups` | Root folder for snapshot storage |
+
+### Restore-FirewallPolicy.ps1
+
+| Parameter | Required | Default | Description |
+|---|---|---|---|
+| `ResourceGroupName` | Yes | — | Resource group containing the policy |
+| `PolicyName` | Yes | — | Firewall policy name |
+| `SnapshotPath` | Yes | — | Path to the timestamped snapshot folder |
+| `SubscriptionId` | No | Current Az context | Azure subscription ID |
+| `-WhatIf` | No | — | Show planned changes, make no write/mutating API calls |
+| `-Force` | No | — | Skip all confirmation prompts (pipeline-safe) |
+| `-Strict` | No | — | Also delete RCGs present in live but not in snapshot |
+
+## Known limitations
+
+- The target firewall policy must already exist before restoring. The scripts restore rules, not infrastructure.
+- Restore is applied resource-by-resource, not as a single transaction. If it fails partway (e.g. a permissions or API error mid-run), the policy is left partially restored. Restore is **idempotent** — fix the cause and re-run the same command to finish; each step re-applies the snapshot's desired state.
+- Restore disrupts in-flight connections through the firewall; plan for a brief traffic interruption.
+- `backups/` is git-ignored — snapshots are not committed to source control. Store them in a secure location (e.g. Azure Blob Storage) for production use.
+- Snapshot files contain your full rule set. Treat them as sensitive configuration data.
+
+## Lab environment
+
+`main.bicep` and `deploy.ps1` deploy a hub-spoke Azure network topology with Azure Firewall Premium — used to test these backup/restore scripts against a real policy and rule set.
+
+### Additional requirements for deployment
+
+- [Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli) (`az login`)
+- [Bicep CLI](https://learn.microsoft.com/en-us/azure/azure-resource-manager/bicep/install) (`az bicep install`)
+
+### Deploy
+
+```powershell
+.\deploy.ps1 -ResourceGroupName rg-hub-spoke-demo
+```
+
+The script prompts for a VM admin password. Deployment takes approximately 30–45 minutes, dominated by the VPN gateway provisioning.
+
+| Parameter | Required | Default | Description |
+|---|---|---|---|
+| `ResourceGroupName` | Yes | — | Resource group to deploy into (created if needed) |
 | `SubscriptionId` | No | Current CLI subscription | Azure subscription ID |
-| `Location` | No | `centralus` | Azure region for all resources |
+| `Location` | No | `centralus` | Azure region |
 | `AdminUsername` | No | `azureuser` | VM administrator username |
 | `AdminPassword` | No | Prompted | VM administrator password |
-
-### Deployment time
-
-Approximately **30–45 minutes**, dominated by the two VPN gateway deployments which run in parallel.
-
-### Outputs
-
-After deployment completes, the script prints:
-
-| Output | Description |
-|---|---|
-| `firewallPrivateIp` | Azure Firewall private IP (used as next hop in route tables) |
-| `firewallMgmtPublicIp` | Azure Firewall dedicated management public IP |
-| `bastionPublicIp` | Azure Bastion public IP |
-| `hubGwPip1` / `hubGwPip2` | Hub VPN Gateway public IPs |
-| `onpremGwPip1` / `onpremGwPip2` | OnPrem VPN Gateway public IPs |
-
-## Connecting to VMs
-
-All VMs are private-only (no public IPs). Connect via **Azure Bastion**:
-
-1. Open the Azure portal
-2. Navigate to any VM (`vm-spk01-01`, `vm-spk02-01`, `vm-onprem-01`)
-3. Click **Connect → Bastion**
-4. Enter username `azureuser` and the password you set at deploy time
-
-## Traffic Flow
-
-- **Spoke → Internet / Hub / OnPrem:** All traffic from spoke subnets routes through Azure Firewall (`0.0.0.0/0` UDR, BGP propagation disabled)
-- **Hub ↔ OnPrem:** Active/Active IPSec VPN with BGP route exchange (4 connections for full redundancy)
-- **Spoke ↔ Spoke:** Via Hub firewall (VNet peering with forwarded traffic enabled)
-
-## Security Notes
-
-> **This is a lab/demo deployment.**
-> - The Azure Firewall is configured with an allow-all rule for testing
-> - SSH (port 22) is open from any source on spoke/onprem NSGs
-> - Replace these rules with least-privilege policies before using in production
 
 ## License
 

@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.41.2.15936",
-      "templateHash": "15529644855383630021"
+      "templateHash": "13329623927754758792"
     }
   },
   "parameters": {
@@ -607,7 +607,7 @@
         "ruleCollections": [
           {
             "ruleCollectionType": "FirewallPolicyFilterRuleCollection",
-            "name": "AllowAllTraffic",
+            "name": "NetworkRules",
             "priority": 100,
             "action": {
               "type": "Allow"
@@ -615,20 +615,217 @@
             "rules": [
               {
                 "ruleType": "NetworkRule",
-                "name": "AllowAll",
-                "description": "Allow all traffic for testing/lab purposes",
+                "name": "Allow-DNS",
+                "description": "Allow DNS from spokes and onprem to Azure DNS",
                 "sourceAddresses": [
-                  "10.0.0.0/16",
+                  "10.0.2.0/24",
+                  "10.0.3.0/24",
+                  "192.168.0.0/24"
+                ],
+                "destinationAddresses": [
+                  "168.63.129.16"
+                ],
+                "destinationPorts": [
+                  "53"
+                ],
+                "ipProtocols": [
+                  "UDP",
+                  "TCP"
+                ]
+              },
+              {
+                "ruleType": "NetworkRule",
+                "name": "Allow-NTP",
+                "description": "Allow NTP outbound from all internal networks",
+                "sourceAddresses": [
+                  "10.0.0.0/23",
+                  "10.0.2.0/24",
+                  "10.0.3.0/24",
                   "192.168.0.0/24"
                 ],
                 "destinationAddresses": [
                   "*"
                 ],
                 "destinationPorts": [
+                  "123"
+                ],
+                "ipProtocols": [
+                  "UDP"
+                ]
+              },
+              {
+                "ruleType": "NetworkRule",
+                "name": "Allow-Spoke-to-Spoke",
+                "description": "Allow traffic between Spoke01 and Spoke02 via firewall",
+                "sourceAddresses": [
+                  "10.0.2.0/24",
+                  "10.0.3.0/24"
+                ],
+                "destinationAddresses": [
+                  "10.0.2.0/24",
+                  "10.0.3.0/24"
+                ],
+                "destinationPorts": [
                   "*"
                 ],
                 "ipProtocols": [
                   "Any"
+                ]
+              },
+              {
+                "ruleType": "NetworkRule",
+                "name": "Allow-OnPrem-RDP",
+                "description": "Allow RDP from onprem to spoke VMs",
+                "sourceAddresses": [
+                  "192.168.0.0/24"
+                ],
+                "destinationAddresses": [
+                  "10.0.2.0/24",
+                  "10.0.3.0/24"
+                ],
+                "destinationPorts": [
+                  "3389"
+                ],
+                "ipProtocols": [
+                  "TCP"
+                ]
+              },
+              {
+                "ruleType": "NetworkRule",
+                "name": "Allow-OnPrem-SSH",
+                "description": "Allow SSH from onprem to spoke VMs",
+                "sourceAddresses": [
+                  "192.168.0.0/24"
+                ],
+                "destinationAddresses": [
+                  "10.0.2.0/24",
+                  "10.0.3.0/24"
+                ],
+                "destinationPorts": [
+                  "22"
+                ],
+                "ipProtocols": [
+                  "TCP"
+                ]
+              },
+              {
+                "ruleType": "NetworkRule",
+                "name": "Allow-Spoke-to-OnPrem",
+                "description": "Allow traffic from spokes to onprem network",
+                "sourceAddresses": [
+                  "10.0.2.0/24",
+                  "10.0.3.0/24"
+                ],
+                "destinationAddresses": [
+                  "192.168.0.0/24"
+                ],
+                "destinationPorts": [
+                  "*"
+                ],
+                "ipProtocols": [
+                  "Any"
+                ]
+              }
+            ]
+          },
+          {
+            "ruleCollectionType": "FirewallPolicyFilterRuleCollection",
+            "name": "ApplicationRules",
+            "priority": 200,
+            "action": {
+              "type": "Allow"
+            },
+            "rules": [
+              {
+                "ruleType": "ApplicationRule",
+                "name": "Allow-WindowsUpdate",
+                "description": "Allow Windows Update endpoints",
+                "sourceAddresses": [
+                  "10.0.2.0/24",
+                  "10.0.3.0/24",
+                  "192.168.0.0/24"
+                ],
+                "protocols": [
+                  {
+                    "protocolType": "Https",
+                    "port": 443
+                  },
+                  {
+                    "protocolType": "Http",
+                    "port": 80
+                  }
+                ],
+                "fqdnTags": [
+                  "WindowsUpdate"
+                ]
+              },
+              {
+                "ruleType": "ApplicationRule",
+                "name": "Allow-MicrosoftServices",
+                "description": "Allow Microsoft update and telemetry FQDNs",
+                "sourceAddresses": [
+                  "10.0.2.0/24",
+                  "10.0.3.0/24",
+                  "192.168.0.0/24"
+                ],
+                "protocols": [
+                  {
+                    "protocolType": "Https",
+                    "port": 443
+                  }
+                ],
+                "targetFqdns": [
+                  "*.microsoft.com",
+                  "*.azure.com",
+                  "*.windowsazure.com",
+                  "*.msftncsi.com"
+                ]
+              },
+              {
+                "ruleType": "ApplicationRule",
+                "name": "Allow-UbuntuAptRepos",
+                "description": "Allow Ubuntu package manager repositories",
+                "sourceAddresses": [
+                  "10.0.2.0/24",
+                  "10.0.3.0/24",
+                  "192.168.0.0/24"
+                ],
+                "protocols": [
+                  {
+                    "protocolType": "Https",
+                    "port": 443
+                  },
+                  {
+                    "protocolType": "Http",
+                    "port": 80
+                  }
+                ],
+                "targetFqdns": [
+                  "*.ubuntu.com",
+                  "*.launchpad.net",
+                  "security.ubuntu.com",
+                  "archive.ubuntu.com"
+                ]
+              },
+              {
+                "ruleType": "ApplicationRule",
+                "name": "Allow-AzurePortal",
+                "description": "Allow Azure portal and management plane access",
+                "sourceAddresses": [
+                  "10.0.2.0/24",
+                  "10.0.3.0/24",
+                  "192.168.0.0/24"
+                ],
+                "protocols": [
+                  {
+                    "protocolType": "Https",
+                    "port": 443
+                  }
+                ],
+                "targetFqdns": [
+                  "portal.azure.com",
+                  "management.azure.com",
+                  "login.microsoftonline.com"
                 ]
               }
             ]
@@ -1115,6 +1312,254 @@
       "dependsOn": [
         "[resourceId('Microsoft.Network/networkInterfaces', 'nic-vm-onprem-01')]"
       ]
+    },
+    {
+      "type": "Microsoft.OperationalInsights/workspaces",
+      "apiVersion": "2023-09-01",
+      "name": "log-hub-spoke-fw-mgmt",
+      "location": "[parameters('location')]",
+      "properties": {
+        "sku": {
+          "name": "PerGB2018"
+        },
+        "retentionInDays": 30
+      }
+    },
+    {
+      "type": "Microsoft.Insights/diagnosticSettings",
+      "apiVersion": "2021-05-01-preview",
+      "scope": "[resourceId('Microsoft.Network/azureFirewalls', 'fw-hub01')]",
+      "name": "diag-fw-hub01",
+      "properties": {
+        "workspaceId": "[resourceId('Microsoft.OperationalInsights/workspaces', 'log-hub-spoke-fw-mgmt')]",
+        "logAnalyticsDestinationType": "Dedicated",
+        "logs": [
+          {
+            "category": "AZFWApplicationRule",
+            "enabled": true
+          },
+          {
+            "category": "AZFWNetworkRule",
+            "enabled": true
+          },
+          {
+            "category": "AZFWNatRule",
+            "enabled": true
+          },
+          {
+            "category": "AZFWThreatIntel",
+            "enabled": true
+          },
+          {
+            "category": "AZFWIdpsSignature",
+            "enabled": true
+          },
+          {
+            "category": "AZFWDnsQuery",
+            "enabled": true
+          },
+          {
+            "category": "AZFWFqdnResolveFailure",
+            "enabled": true
+          },
+          {
+            "category": "AZFWApplicationRuleAggregation",
+            "enabled": true
+          },
+          {
+            "category": "AZFWNetworkRuleAggregation",
+            "enabled": true
+          },
+          {
+            "category": "AZFWNatRuleAggregation",
+            "enabled": true
+          }
+        ],
+        "metrics": [
+          {
+            "category": "AllMetrics",
+            "enabled": true
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/azureFirewalls', 'fw-hub01')]",
+        "[resourceId('Microsoft.OperationalInsights/workspaces', 'log-hub-spoke-fw-mgmt')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Insights/diagnosticSettings",
+      "apiVersion": "2021-05-01-preview",
+      "scope": "[resourceId('Microsoft.Network/virtualNetworkGateways', 'vng-hub01')]",
+      "name": "diag-vng-hub01",
+      "properties": {
+        "workspaceId": "[resourceId('Microsoft.OperationalInsights/workspaces', 'log-hub-spoke-fw-mgmt')]",
+        "logAnalyticsDestinationType": "Dedicated",
+        "logs": [
+          {
+            "category": "GatewayDiagnosticLog",
+            "enabled": true
+          },
+          {
+            "category": "TunnelDiagnosticLog",
+            "enabled": true
+          },
+          {
+            "category": "RouteDiagnosticLog",
+            "enabled": true
+          },
+          {
+            "category": "IKEDiagnosticLog",
+            "enabled": true
+          }
+        ],
+        "metrics": [
+          {
+            "category": "AllMetrics",
+            "enabled": true
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/virtualNetworkGateways', 'vng-hub01')]",
+        "[resourceId('Microsoft.OperationalInsights/workspaces', 'log-hub-spoke-fw-mgmt')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Insights/diagnosticSettings",
+      "apiVersion": "2021-05-01-preview",
+      "scope": "[resourceId('Microsoft.Network/virtualNetworkGateways', 'vng-onprem01')]",
+      "name": "diag-vng-onprem01",
+      "properties": {
+        "workspaceId": "[resourceId('Microsoft.OperationalInsights/workspaces', 'log-hub-spoke-fw-mgmt')]",
+        "logAnalyticsDestinationType": "Dedicated",
+        "logs": [
+          {
+            "category": "GatewayDiagnosticLog",
+            "enabled": true
+          },
+          {
+            "category": "TunnelDiagnosticLog",
+            "enabled": true
+          },
+          {
+            "category": "RouteDiagnosticLog",
+            "enabled": true
+          },
+          {
+            "category": "IKEDiagnosticLog",
+            "enabled": true
+          }
+        ],
+        "metrics": [
+          {
+            "category": "AllMetrics",
+            "enabled": true
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.OperationalInsights/workspaces', 'log-hub-spoke-fw-mgmt')]",
+        "[resourceId('Microsoft.Network/virtualNetworkGateways', 'vng-onprem01')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Insights/diagnosticSettings",
+      "apiVersion": "2021-05-01-preview",
+      "scope": "[resourceId('Microsoft.Network/bastionHosts', 'bastion-hub01')]",
+      "name": "diag-bastion-hub01",
+      "properties": {
+        "workspaceId": "[resourceId('Microsoft.OperationalInsights/workspaces', 'log-hub-spoke-fw-mgmt')]",
+        "logAnalyticsDestinationType": "Dedicated",
+        "logs": [
+          {
+            "category": "BastionAuditLogs",
+            "enabled": true
+          }
+        ],
+        "metrics": [
+          {
+            "category": "AllMetrics",
+            "enabled": true
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/bastionHosts', 'bastion-hub01')]",
+        "[resourceId('Microsoft.OperationalInsights/workspaces', 'log-hub-spoke-fw-mgmt')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Insights/diagnosticSettings",
+      "apiVersion": "2021-05-01-preview",
+      "scope": "[resourceId('Microsoft.Network/networkSecurityGroups', 'nsg-spoke01')]",
+      "name": "diag-nsg-spoke01",
+      "properties": {
+        "workspaceId": "[resourceId('Microsoft.OperationalInsights/workspaces', 'log-hub-spoke-fw-mgmt')]",
+        "logAnalyticsDestinationType": "Dedicated",
+        "logs": [
+          {
+            "category": "NetworkSecurityGroupEvent",
+            "enabled": true
+          },
+          {
+            "category": "NetworkSecurityGroupRuleCounter",
+            "enabled": true
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.OperationalInsights/workspaces', 'log-hub-spoke-fw-mgmt')]",
+        "[resourceId('Microsoft.Network/networkSecurityGroups', 'nsg-spoke01')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Insights/diagnosticSettings",
+      "apiVersion": "2021-05-01-preview",
+      "scope": "[resourceId('Microsoft.Network/networkSecurityGroups', 'nsg-spoke02')]",
+      "name": "diag-nsg-spoke02",
+      "properties": {
+        "workspaceId": "[resourceId('Microsoft.OperationalInsights/workspaces', 'log-hub-spoke-fw-mgmt')]",
+        "logAnalyticsDestinationType": "Dedicated",
+        "logs": [
+          {
+            "category": "NetworkSecurityGroupEvent",
+            "enabled": true
+          },
+          {
+            "category": "NetworkSecurityGroupRuleCounter",
+            "enabled": true
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.OperationalInsights/workspaces', 'log-hub-spoke-fw-mgmt')]",
+        "[resourceId('Microsoft.Network/networkSecurityGroups', 'nsg-spoke02')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Insights/diagnosticSettings",
+      "apiVersion": "2021-05-01-preview",
+      "scope": "[resourceId('Microsoft.Network/networkSecurityGroups', 'nsg-onprem')]",
+      "name": "diag-nsg-onprem",
+      "properties": {
+        "workspaceId": "[resourceId('Microsoft.OperationalInsights/workspaces', 'log-hub-spoke-fw-mgmt')]",
+        "logAnalyticsDestinationType": "Dedicated",
+        "logs": [
+          {
+            "category": "NetworkSecurityGroupEvent",
+            "enabled": true
+          },
+          {
+            "category": "NetworkSecurityGroupRuleCounter",
+            "enabled": true
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.OperationalInsights/workspaces', 'log-hub-spoke-fw-mgmt')]",
+        "[resourceId('Microsoft.Network/networkSecurityGroups', 'nsg-onprem')]"
+      ]
     }
   ],
   "outputs": {
@@ -1145,6 +1590,10 @@
     "bastionPublicIp": {
       "type": "string",
       "value": "[reference(resourceId('Microsoft.Network/publicIPAddresses', 'pip-azure-bastion'), '2023-09-01').ipAddress]"
+    },
+    "logAnalyticsWorkspaceId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.OperationalInsights/workspaces', 'log-hub-spoke-fw-mgmt')]"
     }
   }
 }

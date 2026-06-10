@@ -475,20 +475,137 @@ resource firewallPolicyRules 'Microsoft.Network/firewallPolicies/ruleCollectionG
   properties: {
     priority: 200
     ruleCollections: [
+
+      // --------------------------------------------------------
+      // Network Rules – priority 100
+      // --------------------------------------------------------
       {
         ruleCollectionType: 'FirewallPolicyFilterRuleCollection'
-        name: 'AllowAllTraffic'
+        name: 'NetworkRules'
         priority: 100
         action: { type: 'Allow' }
         rules: [
           {
             ruleType: 'NetworkRule'
-            name: 'AllowAll'
-            description: 'Allow all traffic for testing/lab purposes'
-            sourceAddresses: ['10.0.0.0/16', '192.168.0.0/24']
+            name: 'Allow-DNS'
+            description: 'Allow DNS from spokes and onprem to Azure DNS'
+            sourceAddresses: ['10.0.2.0/24', '10.0.3.0/24', '192.168.0.0/24']
+            destinationAddresses: ['168.63.129.16']
+            destinationPorts: ['53']
+            ipProtocols: ['UDP', 'TCP']
+          }
+          {
+            ruleType: 'NetworkRule'
+            name: 'Allow-NTP'
+            description: 'Allow NTP outbound from all internal networks'
+            sourceAddresses: ['10.0.0.0/23', '10.0.2.0/24', '10.0.3.0/24', '192.168.0.0/24']
             destinationAddresses: ['*']
+            destinationPorts: ['123']
+            ipProtocols: ['UDP']
+          }
+          {
+            ruleType: 'NetworkRule'
+            name: 'Allow-Spoke-to-Spoke'
+            description: 'Allow traffic between Spoke01 and Spoke02 via firewall'
+            sourceAddresses: ['10.0.2.0/24', '10.0.3.0/24']
+            destinationAddresses: ['10.0.2.0/24', '10.0.3.0/24']
             destinationPorts: ['*']
             ipProtocols: ['Any']
+          }
+          {
+            ruleType: 'NetworkRule'
+            name: 'Allow-OnPrem-RDP'
+            description: 'Allow RDP from onprem to spoke VMs'
+            sourceAddresses: ['192.168.0.0/24']
+            destinationAddresses: ['10.0.2.0/24', '10.0.3.0/24']
+            destinationPorts: ['3389']
+            ipProtocols: ['TCP']
+          }
+          {
+            ruleType: 'NetworkRule'
+            name: 'Allow-OnPrem-SSH'
+            description: 'Allow SSH from onprem to spoke VMs'
+            sourceAddresses: ['192.168.0.0/24']
+            destinationAddresses: ['10.0.2.0/24', '10.0.3.0/24']
+            destinationPorts: ['22']
+            ipProtocols: ['TCP']
+          }
+          {
+            ruleType: 'NetworkRule'
+            name: 'Allow-Spoke-to-OnPrem'
+            description: 'Allow traffic from spokes to onprem network'
+            sourceAddresses: ['10.0.2.0/24', '10.0.3.0/24']
+            destinationAddresses: ['192.168.0.0/24']
+            destinationPorts: ['*']
+            ipProtocols: ['Any']
+          }
+        ]
+      }
+
+      // --------------------------------------------------------
+      // Application Rules – priority 200
+      // --------------------------------------------------------
+      {
+        ruleCollectionType: 'FirewallPolicyFilterRuleCollection'
+        name: 'ApplicationRules'
+        priority: 200
+        action: { type: 'Allow' }
+        rules: [
+          {
+            ruleType: 'ApplicationRule'
+            name: 'Allow-WindowsUpdate'
+            description: 'Allow Windows Update endpoints'
+            sourceAddresses: ['10.0.2.0/24', '10.0.3.0/24', '192.168.0.0/24']
+            protocols: [
+              { protocolType: 'Https', port: 443 }
+              { protocolType: 'Http', port: 80 }
+            ]
+            fqdnTags: ['WindowsUpdate']
+          }
+          {
+            ruleType: 'ApplicationRule'
+            name: 'Allow-MicrosoftServices'
+            description: 'Allow Microsoft update and telemetry FQDNs'
+            sourceAddresses: ['10.0.2.0/24', '10.0.3.0/24', '192.168.0.0/24']
+            protocols: [
+              { protocolType: 'Https', port: 443 }
+            ]
+            targetFqdns: [
+              '*.microsoft.com'
+              '*.azure.com'
+              '*.windowsazure.com'
+              '*.msftncsi.com'
+            ]
+          }
+          {
+            ruleType: 'ApplicationRule'
+            name: 'Allow-UbuntuAptRepos'
+            description: 'Allow Ubuntu package manager repositories'
+            sourceAddresses: ['10.0.2.0/24', '10.0.3.0/24', '192.168.0.0/24']
+            protocols: [
+              { protocolType: 'Https', port: 443 }
+              { protocolType: 'Http', port: 80 }
+            ]
+            targetFqdns: [
+              '*.ubuntu.com'
+              '*.launchpad.net'
+              'security.ubuntu.com'
+              'archive.ubuntu.com'
+            ]
+          }
+          {
+            ruleType: 'ApplicationRule'
+            name: 'Allow-AzurePortal'
+            description: 'Allow Azure portal and management plane access'
+            sourceAddresses: ['10.0.2.0/24', '10.0.3.0/24', '192.168.0.0/24']
+            protocols: [
+              { protocolType: 'Https', port: 443 }
+            ]
+            targetFqdns: [
+              'portal.azure.com'
+              'management.azure.com'
+              'login.microsoftonline.com'
+            ]
           }
         ]
       }

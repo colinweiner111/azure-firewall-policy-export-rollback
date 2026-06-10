@@ -1,0 +1,3 @@
+# Firewall policy snapshots — contain full rule set, treat as sensitive config.
+# Store in a secure location (e.g. Azure Storage) for production use.
+backups/
