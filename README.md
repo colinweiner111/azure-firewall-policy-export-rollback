@@ -38,17 +38,20 @@ PowerShell scripts to export an Azure Firewall Policy and all Rule Collection Gr
 [Azure Cloud Shell](https://shell.azure.com) is the easiest way to run these scripts. It has PowerShell 7.x and the Az module pre-installed, and you're already authenticated — no `Connect-AzAccount` needed.
 
 ```powershell
-git clone https://github.com/colinweiner111/azure-firewall-policy-export-restore.git
-cd azure-firewall-policy-export-restore
+git clone https://github.com/colinweiner111/azure-firewall-policy-export-rollback.git
+cd azure-firewall-policy-export-rollback
 ```
+
+The previous repository URL still redirects:
+https://github.com/colinweiner111/azure-firewall-policy-export-restore
 
 Snapshots written to `backups/` persist between Cloud Shell sessions because Cloud Shell storage is backed by an Azure file share.
 
 ### Option B — local machine
 
 ```powershell
-git clone https://github.com/colinweiner111/azure-firewall-policy-export-restore.git
-cd azure-firewall-policy-export-restore
+git clone https://github.com/colinweiner111/azure-firewall-policy-export-rollback.git
+cd azure-firewall-policy-export-rollback
 ```
 
 Then ensure the following are in place:
@@ -99,7 +102,7 @@ Snapshot complete.
     - contosoOps-test-rcg02   | priority 700 | 1 collection(s) |  3 rule(s)
     - platform-all-wrkls-rcg01| priority 800 | 3 collection(s) | 14 rule(s)
 
-To restore this snapshot:
+To roll back using this snapshot:
   .\Rollback-FirewallPolicy.ps1 -ResourceGroupName rg-fw-lab -PolicyName fw-policy-hub01 -SnapshotPath '.\backups\2024-01-15T14-30-00Z'
 ```
 
@@ -110,6 +113,24 @@ Each snapshot contains:
 | `manifest.json` | Metadata, resource IDs, SHA256 hashes for integrity verification |
 | `policy.json` | Full ARM export of the firewall policy |
 | `rcg-<name>.json` | One file per Rule Collection Group |
+
+## Policy layout in this lab
+
+The lab policy creates these Rule Collection Groups (lower priority number is evaluated first):
+
+| RCG | Priority |
+|---|---|
+| `RCG-Platform` | 500 |
+| `RCG-Identity` | 600 |
+| `RCG-Management` | 700 |
+| `RCG-SharedServices` | 800 |
+| `RCG-AVD` | 900 |
+| `RCG-AKS` | 1000 |
+| `RCG-App1` | 1100 |
+| `RCG-App2` | 1200 |
+| `RCG-Temporary` | 60000 |
+
+`RCG-SharedServices` contains sample allow rules at rule collection priorities `801` (network) and `802` (application). The other RCGs are created as placeholders for future workload rules.
 
 ## Roll back from a snapshot
 
@@ -135,12 +156,12 @@ Verifying snapshot integrity...
   All files verified.
 Fetching live state...
 
-Restore plan  [WhatIf — no changes will be made]
+Rollback plan  [WhatIf — no changes will be made]
   Snapshot  : 2024-01-15T14-30-00Z
   Source    : Contoso Production / rg-fw-lab
   Target    : Contoso Production / rg-fw-lab / fw-policy-hub01
 
-  Policy settings will be overwritten from snapshot.
+  Policy settings will be rolled back from snapshot.
 
   Rule Collection Groups:
     [UPDATE]  contosoWeb-rcg01         |  priority 500  |  3 collection(s)  |  10 rule(s)
@@ -166,7 +187,7 @@ Rule-level diff  ([+] in snapshot / will be restored   [-] in live only / will b
     [UPDATE]  platform-all-wrkls-rcg01
       (no rule changes detected)
 
-[WhatIf] Dry run complete — the plan above shows what would be applied. Re-run without -WhatIf to execute.
+[WhatIf] Dry run complete — the plan above shows what would be applied. Re-run without -WhatIf to execute rollback.
 ```
 
 **Step 2 — roll back (single confirmation prompt):**
@@ -181,12 +202,12 @@ Rule-level diff  ([+] in snapshot / will be restored   [-] in live only / will b
 Sample output:
 
 ```
-Restore plan
+Rollback plan
   Snapshot  : 2024-01-15T14-30-00Z
   Source    : Contoso Production / rg-fw-lab
   Target    : Contoso Production / rg-fw-lab / fw-policy-hub01
 
-  Policy settings will be overwritten from snapshot.
+  Policy settings will be rolled back from snapshot.
 
   Rule Collection Groups:
     [UPDATE]  contosoWeb-rcg01         |  priority 500  |  3 collection(s)  |  10 rule(s)
@@ -194,9 +215,9 @@ Restore plan
     [UPDATE]  contosoOps-test-rcg02    |  priority 700  |  1 collection(s)  |   3 rule(s)
     [UPDATE]  platform-all-wrkls-rcg01 |  priority 800  |  3 collection(s)  |  14 rule(s)
 
-Proceed with restore? (yes/no): yes
+Proceed with rollback? (yes/no): yes
 
-Restoring policy settings...
+Rolling back policy settings...
   Policy settings restored.
 
 Restoring rule collection groups...
@@ -267,13 +288,13 @@ These scripts are a safety net and a stepping stone — not a replacement for Ia
 | 3 | Changes via Bicep or Terraform, policy defined in source control |
 | 4 | IaC + CI/CD pipeline, every change is a reviewed PR |
 
-The export/restore scripts remain useful even at stage 3 and 4 — IaC defines what *should* be deployed, but if someone makes an out-of-band change in the portal the export captures what's *actually* running so you can compare and reconcile.
+The export/rollback scripts remain useful even at stage 3 and 4 — IaC defines what *should* be deployed, but if someone makes an out-of-band change in the portal the export captures what's *actually* running so you can compare and reconcile.
 
 The JSON files produced by `Backup-FirewallPolicy.ps1` are valid ARM format and can serve as a starting point for writing Bicep or Terraform — useful if you're building IaC from an existing live policy rather than from scratch.
 
 ## Known limitations
 
-- The target firewall policy must already exist before restoring. The scripts restore rules, not infrastructure.
+- The target firewall policy must already exist before rollback. The scripts roll back rules, not infrastructure.
 - Rollback is applied resource-by-resource, not as a single transaction. If it fails partway (e.g. a permissions or API error mid-run), the policy is left partially rolled back. The script is **idempotent** — fix the cause and re-run the same command to finish; each step re-applies the snapshot's desired state.
 - Rollback disrupts in-flight connections through the firewall; plan for a brief traffic interruption.
 - `backups/` is git-ignored — snapshots are not committed to source control. Store them in a secure location (e.g. Azure Blob Storage) for production use.
@@ -281,7 +302,7 @@ The JSON files produced by `Backup-FirewallPolicy.ps1` are valid ARM format and 
 
 ## Lab environment
 
-`main.bicep` and `deploy.ps1` deploy a minimal Azure Firewall Premium environment with a sample policy and rule set — enough to test the backup/restore scripts without the cost and wait time of a full hub-spoke topology.
+`main.bicep` and `deploy.ps1` deploy a minimal Azure Firewall Premium environment with a sample policy and rule set — enough to test the backup/rollback scripts without the cost and wait time of a full hub-spoke topology.
 
 Deploys: one VNet, one Azure Firewall Premium, one Firewall Policy with network and application rule collections. No VMs, no VPN gateways, no Bastion. Takes approximately 5–10 minutes.
 
@@ -305,3 +326,4 @@ Deploys: one VNet, one Azure Firewall Premium, one Firewall Policy with network 
 ## License
 
 This project is open source and available under the [MIT License](LICENSE).
+

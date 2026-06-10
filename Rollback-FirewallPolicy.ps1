@@ -18,7 +18,7 @@
     Resource group containing the firewall policy.
 
 .PARAMETER PolicyName
-    Name of the Azure Firewall Policy to restore.
+    Name of the Azure Firewall Policy to roll back.
 
 .PARAMETER SnapshotPath
     Path to the timestamped snapshot folder (e.g. .\backups\2024-01-15T14-30-00Z).
@@ -27,7 +27,7 @@
     Azure subscription ID. Defaults to the current Az context subscription.
 
 .PARAMETER WhatIf
-    Show the restore plan without making any write/mutating API calls. Read-only calls
+    Show the rollback plan without making any write/mutating API calls. Read-only calls
     (login check, integrity verification, fetching live state) still run so the plan is accurate.
 
 .PARAMETER Force
@@ -45,22 +45,22 @@
 
 .EXAMPLE
     # Dry-run: see what would change without touching anything
-    .\Restore-FirewallPolicy.ps1 -ResourceGroupName rg-hub-spoke-demo -PolicyName fw-policy-hub01 `
+    .\Rollback-FirewallPolicy.ps1 -ResourceGroupName rg-hub-spoke-demo -PolicyName fw-policy-hub01 `
         -SnapshotPath .\backups\2024-01-15T14-30-00Z -WhatIf
 
 .EXAMPLE
     # Dry-run with rule-level diff — see exactly which rules would change
-    .\Restore-FirewallPolicy.ps1 -ResourceGroupName rg-hub-spoke-demo -PolicyName fw-policy-hub01 `
+    .\Rollback-FirewallPolicy.ps1 -ResourceGroupName rg-hub-spoke-demo -PolicyName fw-policy-hub01 `
         -SnapshotPath .\backups\2024-01-15T14-30-00Z -WhatIf -Diff
 
 .EXAMPLE
-    # Interactive restore with a single confirmation prompt
-    .\Restore-FirewallPolicy.ps1 -ResourceGroupName rg-hub-spoke-demo -PolicyName fw-policy-hub01 `
+    # Interactive rollback with a single confirmation prompt
+    .\Rollback-FirewallPolicy.ps1 -ResourceGroupName rg-hub-spoke-demo -PolicyName fw-policy-hub01 `
         -SnapshotPath .\backups\2024-01-15T14-30-00Z
 
 .EXAMPLE
-    # Full rollback: restore snapshot exactly, delete any extra RCGs, no prompts
-    .\Restore-FirewallPolicy.ps1 -ResourceGroupName rg-hub-spoke-demo -PolicyName fw-policy-hub01 `
+    # Full rollback: apply snapshot exactly, delete any extra RCGs, no prompts
+    .\Rollback-FirewallPolicy.ps1 -ResourceGroupName rg-hub-spoke-demo -PolicyName fw-policy-hub01 `
         -SnapshotPath .\backups\2024-01-15T14-30-00Z -Strict -Force
 #>
 param(
@@ -83,13 +83,13 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-# Set once mutation begins, so Fail can warn that the policy may be partially restored.
+# Set once mutation begins, so Fail can warn that the policy may be partially rolled back.
 $script:mutationStarted = $false
 
 function Fail([string]$msg) {
     Write-Error $msg
     if ($script:mutationStarted) {
-        Write-Host "The policy may be partially restored. Restore is idempotent — fix the cause above and re-run the same command to finish it." -ForegroundColor Yellow
+        Write-Host "The policy may be partially rolled back. Rollback is idempotent — fix the cause above and re-run the same command to finish it." -ForegroundColor Yellow
     }
     exit 1
 }
@@ -194,7 +194,7 @@ function Show-RcgDiff {
     if (-not $anyChange) { Write-Host '      (no rule changes detected)' -ForegroundColor DarkGray }
 }
 
-# Polls until the resource returns 404 — needed after async DELETE (202) to avoid stale post-restore output.
+# Polls until the resource returns 404 — needed after async DELETE (202) to avoid stale post-rollback output.
 function Wait-Deleted {
     param([string]$Path, [string]$Label, [int]$TimeoutSec = 120)
     $deadline = (Get-Date).AddSeconds($TimeoutSec)
@@ -256,7 +256,7 @@ Write-Host '  All files verified.' -ForegroundColor DarkGreen
 if ($manifest.subscriptionId -and ($context.Subscription.Id -ne $manifest.subscriptionId) -and -not $Force -and -not $WhatIf) {
     Write-Warning "Snapshot was captured from subscription '$($manifest.subscriptionId)' ($($manifest.subscriptionName))."
     Write-Warning "Current subscription is '$($context.Subscription.Id)' ($($context.Subscription.Name))."
-    $confirm = Read-Host 'Restore to a different subscription? (yes/no)'
+    $confirm = Read-Host 'Roll back to a different subscription? (yes/no)'
     if ($confirm -ne 'yes') { Write-Host 'Aborted.' -ForegroundColor Yellow; exit 0 }
 }
 
@@ -276,14 +276,14 @@ $liveRcgNames = @($liveRcgList | ForEach-Object { $_.name })
 $snapRcgNames = @($manifest.ruleCollectionGroups | ForEach-Object { $_.name })
 $rcgsToDelete = @($liveRcgNames | Where-Object { $_ -notin $snapRcgNames })
 
-# ── Show restore plan ─────────────────────────────────────────────────────────
+# ── Show rollback plan ────────────────────────────────────────────────────────
 $dryTag = if ($WhatIf) { '  [WhatIf — no changes will be made]' } else { '' }
-Write-Host "`nRestore plan$dryTag" -ForegroundColor Yellow
+Write-Host "`nRollback plan$dryTag" -ForegroundColor Yellow
 Write-Host "  Snapshot  : $($manifest.snapshotId)"
 Write-Host "  Source    : $($manifest.subscriptionName) / $($manifest.resourceGroup)"
 Write-Host "  Target    : $($context.Subscription.Name) / $ResourceGroupName / $PolicyName"
 Write-Host ''
-Write-Host '  Policy settings will be overwritten from snapshot.'
+Write-Host '  Policy settings will be rolled back from snapshot.'
 Write-Host ''
 Write-Host '  Rule Collection Groups:'
 foreach ($e in ($manifest.ruleCollectionGroups | Sort-Object { $_.priority })) {
@@ -333,7 +333,7 @@ if ($WhatIf -and $Diff) {
 }
 
 if ($WhatIf) {
-    Write-Host "[WhatIf] Dry run complete — the plan above shows what would be applied. Re-run without -WhatIf to execute.`n" -ForegroundColor Cyan
+    Write-Host "[WhatIf] Dry run complete — the plan above shows what would be applied. Re-run without -WhatIf to execute rollback.`n" -ForegroundColor Cyan
     exit 0
 }
 
@@ -342,14 +342,14 @@ if (-not $Force) {
     if ($Strict -and $rcgsToDelete.Count -gt 0) {
         Write-Warning "$($rcgsToDelete.Count) Rule Collection Group(s) will be permanently DELETED."
     }
-    $confirm = Read-Host "`nProceed with restore? (yes/no)"
+    $confirm = Read-Host "`nProceed with rollback? (yes/no)"
     if ($confirm -ne 'yes') { Write-Host 'Aborted.' -ForegroundColor Yellow; exit 0 }
 }
 
-# ── Restore policy settings ───────────────────────────────────────────────────
-# Past this point a failure can leave the policy partially restored; Fail will say so.
+# ── Roll back policy settings ────────────────────────────────────────────────
+# Past this point a failure can leave the policy partially rolled back; Fail will say so.
 $script:mutationStarted = $true
-Write-Host "`nRestoring policy settings..." -ForegroundColor Cyan
+Write-Host "`nRolling back policy settings..." -ForegroundColor Cyan
 $policyBackup = Get-Content $policyBackupFile -Encoding UTF8 | ConvertFrom-Json
 
 # Strip fields ARM rejects in PUT body.
@@ -360,13 +360,13 @@ if ($policyBackup.properties) {
 
 $putResp = Invoke-AzRestMethod -Path "${base}?api-version=${apiVer}" -Method PUT -Payload ($policyBackup | ConvertTo-Json -Depth 30)
 if ($putResp.StatusCode -notin @(200, 201, 202)) {
-    Fail "Failed to restore policy settings (HTTP $($putResp.StatusCode)): $($putResp.Content)"
+    Fail "Failed to roll back policy settings (HTTP $($putResp.StatusCode)): $($putResp.Content)"
 }
 Wait-Provisioned "${base}?api-version=${apiVer}" "policy '$PolicyName'"
-Write-Host '  Policy settings restored.' -ForegroundColor DarkGreen
+Write-Host '  Policy settings rolled back.' -ForegroundColor DarkGreen
 
-# ── Restore RCGs in priority order ────────────────────────────────────────────
-Write-Host "`nRestoring rule collection groups..." -ForegroundColor Cyan
+# ── Roll back RCGs in priority order ─────────────────────────────────────────
+Write-Host "`nRolling back rule collection groups..." -ForegroundColor Cyan
 foreach ($rcgEntry in ($manifest.ruleCollectionGroups | Sort-Object { $_.priority })) {
     $rcgName = $rcgEntry.name
     $action  = if ($rcgName -in $liveRcgNames) { 'Updating' } else { 'Creating' }
@@ -381,7 +381,7 @@ foreach ($rcgEntry in ($manifest.ruleCollectionGroups | Sort-Object { $_.priorit
     $rcgPath = "${base}/ruleCollectionGroups/${rcgName}?api-version=${apiVer}"
     $putResp = Invoke-AzRestMethod -Path $rcgPath -Method PUT -Payload ($rcgBackup | ConvertTo-Json -Depth 30)
     if ($putResp.StatusCode -notin @(200, 201, 202)) {
-        Fail "Failed to restore RCG '$rcgName' (HTTP $($putResp.StatusCode)): $($putResp.Content)"
+        Fail "Failed to roll back RCG '$rcgName' (HTTP $($putResp.StatusCode)): $($putResp.Content)"
     }
     Wait-Provisioned $rcgPath "RCG '$rcgName'"
     Write-Host "    Done." -ForegroundColor DarkGreen
@@ -406,15 +406,15 @@ if ($Strict -and $rcgsToDelete.Count -gt 0) {
     }
 }
 
-# ── Post-restore summary ──────────────────────────────────────────────────────
-Write-Host "`nPost-restore verification..." -ForegroundColor Cyan
+# ── Post-rollback summary ─────────────────────────────────────────────────────
+Write-Host "`nPost-rollback verification..." -ForegroundColor Cyan
 $finalRcgList = @(Get-AllArmItems "${base}/ruleCollectionGroups?api-version=${apiVer}")
 
-Write-Host "`nRestore complete." -ForegroundColor Green
+Write-Host "`nRollback complete." -ForegroundColor Green
 Write-Host "  Snapshot : $($manifest.snapshotId)"
 Write-Host "  Policy   : $PolicyName"
 Write-Host ''
-Write-Host '  Live Rule Collection Groups after restore:'
+Write-Host '  Live Rule Collection Groups after rollback:'
 foreach ($rcg in ($finalRcgList | Sort-Object { $_.properties.priority })) {
     $rcCount   = ($rcg.properties.ruleCollections | Measure-Object).Count
     $ruleCount = 0
@@ -424,4 +424,5 @@ foreach ($rcg in ($finalRcgList | Sort-Object { $_.properties.priority })) {
     $tag = if ($rcg.name -notin $snapRcgNames) { '  [not in snapshot]' } else { '' }
     Write-Host "    - $($rcg.name) | priority $($rcg.properties.priority) | $rcCount collection(s) | $ruleCount rule(s)$tag"
 }
+
 

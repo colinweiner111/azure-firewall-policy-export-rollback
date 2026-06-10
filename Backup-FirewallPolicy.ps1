@@ -186,5 +186,5 @@ foreach ($e in $rcgEntries) {
     Write-Host "    - $($e.name) | priority $($e.priority) | $($e.ruleCollections) collection(s) | $($e.totalRules) rule(s)"
 }
 Write-Host ''
-Write-Host 'To restore this snapshot:' -ForegroundColor Yellow
+Write-Host 'To roll back using this snapshot:' -ForegroundColor Yellow
 Write-Host "  .\Rollback-FirewallPolicy.ps1 -ResourceGroupName $ResourceGroupName -PolicyName $PolicyName -SnapshotPath '$snapshotDir'" -ForegroundColor Yellow
