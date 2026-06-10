@@ -1,8 +1,10 @@
 # Azure Firewall Policy Export and Restore
 
-PowerShell scripts to export an Azure Firewall Policy and all Rule Collection Groups to a timestamped snapshot, then restore from any export with dry-run support. Designed so a customer can capture the current state before making rule changes and restore in minutes if something goes wrong.
+PowerShell scripts to export an Azure Firewall Policy and all Rule Collection Groups to a timestamped snapshot, then roll back from any snapshot with dry-run support. Designed so a customer can capture the current state before making rule changes and roll back in minutes if something goes wrong.
 
-> **Note:** This is a operational safety net for environments where firewall rules are still managed manually. It is not a replacement for Infrastructure as Code (IaC). If you are moving towards Bicep or Terraform, the JSON exports produced by these scripts can serve as a starting point for building your IaC definitions.
+> **Not Azure Backup:** These scripts export ARM JSON and PUT it back through the ARM API. This is not the same as Azure Backup or Recovery Services Vault — there is no native Azure Firewall backup service. Think of it as a configuration snapshot and rollback tool.
+
+> **Note:** This is an operational safety net for environments where firewall rules are still managed manually. It is not a replacement for Infrastructure as Code (IaC). If you are moving towards Bicep or Terraform, the JSON exports produced by these scripts can serve as a starting point for building your IaC definitions.
 
 ## When to use this
 
@@ -10,7 +12,7 @@ PowerShell scripts to export an Azure Firewall Policy and all Rule Collection Gr
 |---|---|
 | About to make manual rule changes in the portal or via CLI | **Yes** — snapshot first |
 | Handing off a firewall to another team — document its current state | **Yes** |
-| A rule change caused a connectivity issue and you need to roll back fast | **Yes** |
+| A rule change caused a connectivity issue and you need to roll back | **Yes** |
 | Testing new rules in a dev/test firewall before promoting to prod | **Yes** |
 | Primary backup / disaster recovery strategy | **No** — this is a safety net, not a DR tool |
 | Backing up the firewall infrastructure itself (VNet, public IP, etc.) | **No** — rules only |
@@ -26,7 +28,7 @@ PowerShell scripts to export an Azure Firewall Policy and all Rule Collection Gr
 | File | Purpose |
 |---|---|
 | `Backup-FirewallPolicy.ps1` | Exports firewall policy + RCGs to a timestamped snapshot |
-| `Restore-FirewallPolicy.ps1` | Restores policy + RCGs from a snapshot with dry-run support |
+| `Restore-FirewallPolicy.ps1` | Rolls back policy + RCGs from a snapshot with dry-run support |
 | `main.bicep` / `deploy.ps1` | Hub-spoke lab environment used for testing |
 
 ## Getting started
@@ -67,7 +69,7 @@ Then ensure the following are in place:
 
 ## Snapshot before a change
 
-Run this before editing any firewall rules. The snapshot is saved to `backups/<timestamp>/` and is git-ignored by default.
+Run this before editing any firewall rules. If something goes wrong, you can roll back to this snapshot in minutes.
 
 ```powershell
 .\Backup-FirewallPolicy.ps1 `
@@ -109,9 +111,9 @@ Each snapshot contains:
 | `policy.json` | Full ARM export of the firewall policy |
 | `rcg-<name>.json` | One file per Rule Collection Group |
 
-## Restore from a snapshot
+## Roll back from a snapshot
 
-**Step 1 — dry-run (shows exactly which rules would be restored, removed, or modified):**
+**Step 1 — dry-run (shows exactly which rules would be rolled back, removed, or modified):**
 
 ```powershell
 .\Restore-FirewallPolicy.ps1 `
@@ -167,7 +169,7 @@ Rule-level diff  ([+] in snapshot / will be restored   [-] in live only / will b
 [WhatIf] Dry run complete — the plan above shows what would be applied. Re-run without -WhatIf to execute.
 ```
 
-**Step 2 — interactive restore (single confirmation prompt):**
+**Step 2 — roll back (single confirmation prompt):**
 
 ```powershell
 .\Restore-FirewallPolicy.ps1 `
@@ -220,7 +222,7 @@ Restore complete.
     - platform-all-wrkls-rcg01 | priority 800 | 3 collection(s) | 14 rule(s)
 ```
 
-**Full restore — match snapshot exactly, delete any RCGs added since the export:**
+**Full rollback — match snapshot exactly, delete any RCGs added since the export:**
 
 ```powershell
 .\Restore-FirewallPolicy.ps1 `
@@ -261,7 +263,7 @@ These scripts are a safety net and a stepping stone — not a replacement for Ia
 | Stage | Approach |
 |---|---|
 | 1 | Manual changes in the portal, no safety net |
-| 2 | Manual changes + export/restore ← **this repo** |
+| 2 | Manual changes + snapshot/rollback ← **this repo** |
 | 3 | Changes via Bicep or Terraform, policy defined in source control |
 | 4 | IaC + CI/CD pipeline, every change is a reviewed PR |
 
@@ -272,8 +274,8 @@ The JSON files produced by `Backup-FirewallPolicy.ps1` are valid ARM format and 
 ## Known limitations
 
 - The target firewall policy must already exist before restoring. The scripts restore rules, not infrastructure.
-- Restore is applied resource-by-resource, not as a single transaction. If it fails partway (e.g. a permissions or API error mid-run), the policy is left partially restored. Restore is **idempotent** — fix the cause and re-run the same command to finish; each step re-applies the snapshot's desired state.
-- Restore disrupts in-flight connections through the firewall; plan for a brief traffic interruption.
+- Rollback is applied resource-by-resource, not as a single transaction. If it fails partway (e.g. a permissions or API error mid-run), the policy is left partially rolled back. The script is **idempotent** — fix the cause and re-run the same command to finish; each step re-applies the snapshot's desired state.
+- Rollback disrupts in-flight connections through the firewall; plan for a brief traffic interruption.
 - `backups/` is git-ignored — snapshots are not committed to source control. Store them in a secure location (e.g. Azure Blob Storage) for production use.
 - Snapshot files contain your full rule set. Treat them as sensitive configuration data.
 
