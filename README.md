@@ -21,14 +21,14 @@ PowerShell scripts to export an Azure Firewall Policy and all Rule Collection Gr
 
 ## How it works
 
-`Backup-FirewallPolicy.ps1` exports the full policy and each Rule Collection Group as ARM JSON into a timestamped folder. `Restore-FirewallPolicy.ps1` reads that snapshot, verifies file integrity, and PUTs each resource back in priority order — waiting for each ARM operation to complete before moving to the next.
+`Backup-FirewallPolicy.ps1` exports the full policy and each Rule Collection Group as ARM JSON into a timestamped folder. `Rollback-FirewallPolicy.ps1` reads that snapshot, verifies file integrity, and PUTs each resource back in priority order — waiting for each ARM operation to complete before moving to the next.
 
 ## Files
 
 | File | Purpose |
 |---|---|
 | `Backup-FirewallPolicy.ps1` | Exports firewall policy + RCGs to a timestamped snapshot |
-| `Restore-FirewallPolicy.ps1` | Rolls back policy + RCGs from a snapshot with dry-run support |
+| `Rollback-FirewallPolicy.ps1` | Rolls back policy + RCGs from a snapshot with dry-run support |
 | `main.bicep` / `deploy.ps1` | Hub-spoke lab environment used for testing |
 
 ## Getting started
@@ -100,7 +100,7 @@ Snapshot complete.
     - platform-all-wrkls-rcg01| priority 800 | 3 collection(s) | 14 rule(s)
 
 To restore this snapshot:
-  .\Restore-FirewallPolicy.ps1 -ResourceGroupName rg-fw-lab -PolicyName fw-policy-hub01 -SnapshotPath '.\backups\2024-01-15T14-30-00Z'
+  .\Rollback-FirewallPolicy.ps1 -ResourceGroupName rg-fw-lab -PolicyName fw-policy-hub01 -SnapshotPath '.\backups\2024-01-15T14-30-00Z'
 ```
 
 Each snapshot contains:
@@ -116,7 +116,7 @@ Each snapshot contains:
 **Step 1 — dry-run (shows exactly which rules would be rolled back, removed, or modified):**
 
 ```powershell
-.\Restore-FirewallPolicy.ps1 `
+.\Rollback-FirewallPolicy.ps1 `
     -ResourceGroupName rg-hub-spoke-demo `
     -PolicyName        fw-policy-hub01 `
     -SnapshotPath      .\backups\2024-01-15T14-30-00Z `
@@ -172,7 +172,7 @@ Rule-level diff  ([+] in snapshot / will be restored   [-] in live only / will b
 **Step 2 — roll back (single confirmation prompt):**
 
 ```powershell
-.\Restore-FirewallPolicy.ps1 `
+.\Rollback-FirewallPolicy.ps1 `
     -ResourceGroupName rg-hub-spoke-demo `
     -PolicyName        fw-policy-hub01 `
     -SnapshotPath      .\backups\2024-01-15T14-30-00Z
@@ -225,7 +225,7 @@ Restore complete.
 **Full rollback — match snapshot exactly, delete any RCGs added since the export:**
 
 ```powershell
-.\Restore-FirewallPolicy.ps1 `
+.\Rollback-FirewallPolicy.ps1 `
     -ResourceGroupName rg-hub-spoke-demo `
     -PolicyName        fw-policy-hub01 `
     -SnapshotPath      .\backups\2024-01-15T14-30-00Z `
@@ -243,7 +243,7 @@ Restore complete.
 | `SubscriptionId` | No | Current Az context | Azure subscription ID |
 | `BackupDir` | No | `.\backups` | Root folder for snapshot storage |
 
-### Restore-FirewallPolicy.ps1
+### Rollback-FirewallPolicy.ps1
 
 | Parameter | Required | Default | Description |
 |---|---|---|---|

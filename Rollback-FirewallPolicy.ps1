@@ -1,11 +1,11 @@
 #Requires -Version 5.1   # minimum; PowerShell 7.x is recommended (see README)
 <#
 .SYNOPSIS
-    Restores an Azure Firewall Policy and Rule Collection Groups from a snapshot.
+    Rolls back an Azure Firewall Policy and Rule Collection Groups from a snapshot.
 
 .DESCRIPTION
     Loads a snapshot produced by Backup-FirewallPolicy.ps1, verifies file integrity, then
-    restores policy settings and each Rule Collection Group via the ARM API. Each PUT waits
+    rolls back policy settings and each Rule Collection Group via the ARM API. Each PUT waits
     for the operation to reach Succeeded before proceeding to the next resource.
 
     Default behavior (safe): restores items in the snapshot, leaves any extra RCGs in the

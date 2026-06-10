@@ -6,7 +6,7 @@
 .DESCRIPTION
     Exports the full firewall policy resource and each Rule Collection Group into separate JSON
     files under a timestamped folder. A manifest.json with SHA256 integrity hashes and snapshot
-    metadata is written alongside the exports. Use Restore-FirewallPolicy.ps1 to roll back.
+    metadata is written alongside the exports. Use Rollback-FirewallPolicy.ps1 to roll back.
 
 .PARAMETER ResourceGroupName
     Resource group containing the firewall policy.
@@ -187,4 +187,4 @@ foreach ($e in $rcgEntries) {
 }
 Write-Host ''
 Write-Host 'To restore this snapshot:' -ForegroundColor Yellow
-Write-Host "  .\Restore-FirewallPolicy.ps1 -ResourceGroupName $ResourceGroupName -PolicyName $PolicyName -SnapshotPath '$snapshotDir'" -ForegroundColor Yellow
+Write-Host "  .\Rollback-FirewallPolicy.ps1 -ResourceGroupName $ResourceGroupName -PolicyName $PolicyName -SnapshotPath '$snapshotDir'" -ForegroundColor Yellow
