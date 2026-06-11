@@ -44,9 +44,6 @@ git clone https://github.com/colinweiner111/azure-firewall-policy-export-rollbac
 cd azure-firewall-policy-export-rollback
 ```
 
-The previous repository URL still redirects:
-https://github.com/colinweiner111/azure-firewall-policy-export-restore
-
 Snapshots written to `backups/` persist between Cloud Shell sessions because Cloud Shell storage is backed by an Azure file share.
 
 ### Option B — local machine
