@@ -326,8 +326,8 @@ If the resource group does not exist, the script will prompt for a region when `
 | Parameter | Required | Default | Description |
 |---|---|---|---|
 | `ResourceGroupName` | Yes | — | Resource group to deploy into (created if needed) |
-| `SubscriptionId` | No | Current CLI subscription | Azure subscription ID |
-| `Location` | No | `centralus` | Azure region |
+| `SubscriptionId` | No | Current subscription context | Azure subscription ID |
+| `Location` | No | Existing RG location or prompted | Azure region |
 
 ### Lab environment quick start (optional)
 
