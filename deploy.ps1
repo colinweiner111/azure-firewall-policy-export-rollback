@@ -76,7 +76,7 @@ Write-Host "Deploying Bicep template (Azure Firewall takes ~5-10 min)..." -Foreg
 az deployment group create `
     @azSubArgs `
     --resource-group $ResourceGroupName `
-    --template-file "$PSScriptRoot\main.bicep" `
+    --template-file "$PSScriptRoot/main.bicep" `
     --parameters location=$Location `
     --name fw-lab-deploy
 
